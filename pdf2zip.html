@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale = 1.0, maximum-scale = 1.0, user-scalable=no">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<style type="text/css">
+
+#upload-button {
+	width: 150px;
+	display: block;
+	margin: 20px auto;
+}
+
+#file-name {
+	width: 150px;
+  margin: 0 auto;
+}
+
+#file-to-upload {
+	display: none;
+}
+
+#pdf-main-container {
+	width: 400px;
+	margin: 20px auto;
+}
+
+#pdf-loader {
+	/* display: none; */
+	text-align: center;
+	color: #999999;
+	font-size: 13px;
+	line-height: 100px;
+	height: 100px;
+}
+
+#pdf-contents {
+	/* display: none; */
+}
+
+#pdf-meta {
+	overflow: hidden;
+	margin: 0 0 20px 0;
+}
+
+#pdf-buttons {
+	float: left;
+}
+
+#page-count-container {
+	float: right;
+}
+
+#pdf-current-page {
+	display: inline;
+}
+
+#pdf-total-pages {
+	display: inline;
+}
+
+#pdf-canvas {
+	border: 1px solid rgba(0,0,0,0.2);
+	box-sizing: border-box;
+	position: fixed;
+  height: 0;
+  width: 0;
+}
+
+#page-loader {
+	height: 100px;
+	line-height: 100px;
+	text-align: center;
+	display: none;
+	color: #999999;
+	font-size: 13px;
+}
+
+#download-file {
+	width: 150px;
+	margin: 20px auto 0 auto;
+	font-size: 13px;
+	text-align: center;
+  display: none;
+}
+
+#loading-text {
+  margin: 10px auto 0;
+  text-align: center;
+}
+
+</style>
+</head>
+
+<body>
+
+<button id="upload-button">Select PDF</button> 
+<input type="file" id="file-to-upload" accept="application/pdf" value="Select PDF"/>
+<div id="file-name"></div>
+
+<div id="pdf-main-container">
+	<!-- <div id="pdf-loader">Loading document ...</div> -->
+	<div id="pdf-contents">
+		<!-- <div id="pdf-meta">
+			<div id="pdf-buttons">
+				<button id="pdf-prev">Previous</button>
+				<button id="pdf-next">Next</button>
+			</div>
+			<div id="page-count-container">Page <div id="pdf-current-page"></div> of <div id="pdf-total-pages"></div></div>
+		</div> -->
+		<canvas id="pdf-canvas"></canvas>
+		<!-- <div id="page-loader">Loading page ...</div> -->
+	</div>
+</div>
+<!-- <a id="download-file" href="#">Download as zip</a> -->
+<button id="download-file">Download as zip</button>
+<div id="loading-text"></div>
+
+<script>
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+		'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+var __PDF_DOC,
+	__CURRENT_PAGE,
+	__TOTAL_PAGES,
+	__PAGE_RENDERING_IN_PROGRESS = 0,
+	__CANVAS = $('#pdf-canvas').get(0),
+	__CANVAS_CTX = __CANVAS.getContext('2d'),
+  __FILENAME_WITHOUT_SUFFIX;
+
+function showPDF(pdf_url) {
+	$("#pdf-loader").show();
+
+	const loadingTask = pdfjsLib.getDocument({ url: pdf_url });
+  loadingTask.promise.then(function(pdf_doc) {
+		__PDF_DOC = pdf_doc;
+		__TOTAL_PAGES = __PDF_DOC.numPages;
+		
+		// Hide the pdf loader and show pdf container in HTML
+		// $("#pdf-loader").hide();
+		// $("#pdf-contents").show();
+		// $("#pdf-total-pages").text(__TOTAL_PAGES);
+
+		// Show the first page
+		showPage(1);
+	}).catch(function(error) {
+		// If error re-show the upload button
+		// $("#pdf-loader").hide();
+		// $("#upload-button").show();
+		
+		alert(error.message);
+	});;
+}
+
+async function showPage(page_no) {
+	__PAGE_RENDERING_IN_PROGRESS = 1;
+	__CURRENT_PAGE = page_no;
+
+	// Disable Prev & Next buttons while page is being loaded
+	// $("#pdf-next, #pdf-prev").attr('disabled', 'disabled');
+
+	// While page is being rendered hide the canvas and show a loading message
+	// $("#pdf-canvas").hide();
+	// $("#page-loader").show();
+	// $("#download-file").hide();
+
+	// Update current page in HTML
+	// $("#pdf-current-page").text(page_no);
+	
+  const pdf = await __PDF_DOC;
+  const page = await pdf.getPage(page_no);
+
+  const desiredWidth = 1920;
+  var viewport = page.getViewport({ scale: 1, });
+  var scale = desiredWidth / viewport.width;
+  var scaledViewport = page.getViewport({ scale: scale, });
+
+  const outputScale = 1;
+
+  // // Get viewport of the page at required scale
+  __CANVAS.width = Math.floor(scaledViewport.width * outputScale);
+  __CANVAS.height = Math.floor(scaledViewport.height * outputScale);
+  __CANVAS.style.width = Math.floor(scaledViewport.width) + "px";
+  __CANVAS.style.height = Math.floor(scaledViewport.height) + "px";
+  __CANVAS.style.top = `${-scaledViewport.width * outputScale}px`;
+  __CANVAS.style.left = `${-scaledViewport.height * outputScale}px`;
+
+  const transform = outputScale !== 1
+    ? [outputScale, 0, 0, outputScale, 0, 0]
+    : null;
+
+  const renderContext = {
+    canvasContext: __CANVAS_CTX,
+    transform: transform,
+    viewport: scaledViewport,
+  };
+  await page.render(renderContext).promise;
+  // $("#pdf-next, #pdf-prev").removeAttr('disabled');
+
+  // // Show the canvas and hide the page loader
+  // $("#pdf-canvas").show();
+  // $("#page-loader").hide();
+  // $("#download-file").show();
+}
+
+// Upon click this should should trigger click on the #file-to-upload file input element
+// This is better than showing the not-good-looking file input element
+$("#upload-button").on('click', function() {
+	$("#file-to-upload").trigger('click');
+});
+
+// When user chooses a PDF file
+$("#file-to-upload").on('change', function() {
+	// Validate whether PDF
+    if(['application/pdf'].indexOf($("#file-to-upload").get(0).files[0].type) == -1) {
+        alert('Error : Not a PDF');
+        return;
+    }
+
+	// $("#upload-button").hide();
+
+	// Send the object url of the pdf
+  const file = $("#file-to-upload").get(0).files[0];
+  const filename = file.name;
+  $("#file-name").text(filename);
+  $("#download-file").css("display", "block");
+  __FILENAME_WITHOUT_SUFFIX = filename.split('.').slice(0, -1).join('.');
+	showPDF(URL.createObjectURL(file));
+});
+
+// // Previous page of the PDF
+// $("#pdf-prev").on('click', function() {
+// 	if(__CURRENT_PAGE != 1)
+// 		showPage(--__CURRENT_PAGE);
+// });
+
+// // Next page of the PDF
+// $("#pdf-next").on('click', function() {
+// 	if(__CURRENT_PAGE != __TOTAL_PAGES)
+// 		showPage(++__CURRENT_PAGE);
+// });
+
+// Download button
+$("#download-file").on('click', function() {
+	// $(this).attr('href', __CANVAS.toDataURL()).attr('download', 'page.png');
+	// $(this).attr('href', __CANVAS.toDataURL()).attr('download', 'page.png');
+  (async () => {
+    var zip = new JSZip();
+    const index_width = __TOTAL_PAGES.toString().length;
+    for (var i = 1; i <= __TOTAL_PAGES; i++) {
+      $("#loading-text").text(`Generating image ${i}/${__TOTAL_PAGES}`);
+      await showPage(i);
+      const blob = await new Promise(resolve => __CANVAS.toBlob(resolve));
+      zip.file(`${__FILENAME_WITHOUT_SUFFIX}_${i.toString().padStart(index_width, '0')}.png`, blob);
+    }
+    zip.generateAsync({ type: "blob" }, function updateCallback(metadata) {
+      $("#loading-text").text(`Creating zip file ${Math.floor(metadata.percent)}%`);
+      // element.style.width = metadata.percent + '%';
+    }).then(function (content) {
+      // see FileSaver.js
+      saveAs(content, `${__FILENAME_WITHOUT_SUFFIX}.zip`);
+      $("#loading-text").text('');
+    });
+  })();
+});
+
+</script>
+
+</body>
+</html>
